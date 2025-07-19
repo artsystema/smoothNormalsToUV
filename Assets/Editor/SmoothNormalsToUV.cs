@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.Formats.Fbx.Exporter;
 using UnityEngine;
 
 public class SmoothNormalsToUV : EditorWindow
@@ -8,6 +9,7 @@ public class SmoothNormalsToUV : EditorWindow
     private bool normalize = false;
     private bool useAngle = false;
     private float angleThreshold = 60f;
+    private bool overwriteSource = false;
 
     [MenuItem("Tools/Smooth Normals to UV")]
     public static void ShowWindow()
@@ -26,23 +28,32 @@ public class SmoothNormalsToUV : EditorWindow
         {
             angleThreshold = EditorGUILayout.FloatField(new GUIContent("Smoothing Angle"), angleThreshold);
         }
+        overwriteSource = EditorGUILayout.Toggle(new GUIContent("Overwrite Source Asset"), overwriteSource);
 
         if (GUILayout.Button("Process Selected Meshes"))
         {
             ProcessSelection();
         }
+        if (GUILayout.Button("Export Selected as FBX"))
+        {
+            ExportSelectionAsFbx();
+        }
     }
 
     private void ProcessSelection()
     {
+        string saveFolder = "Assets/ProcessedMeshes";
+        if (!System.IO.Directory.Exists(saveFolder))
+            System.IO.Directory.CreateDirectory(saveFolder);
         foreach (var go in Selection.gameObjects)
         {
             MeshFilter mf = go.GetComponent<MeshFilter>();
             if (mf == null || mf.sharedMesh == null)
                 continue;
 
-            Mesh newMesh = Instantiate(mf.sharedMesh);
-            newMesh.name = mf.sharedMesh.name + "_SmoothNormals";
+            Mesh mesh = mf.sharedMesh;
+            Mesh newMesh = Instantiate(mesh);
+            newMesh.name = mesh.name + "_SmoothNormals";
 
             Vector3[] verts = newMesh.vertices;
             Vector3[] norms = newMesh.normals;
@@ -70,9 +81,49 @@ public class SmoothNormalsToUV : EditorWindow
                 else
                     uvData.Add(n);
             }
+            // Remove clamping, use entered value directly
             newMesh.SetUVs(uvChannel, uvData);
+
+            if (overwriteSource)
+            {
+                string assetPath = AssetDatabase.GetAssetPath(mesh);
+                if (!string.IsNullOrEmpty(assetPath) && assetPath.EndsWith(".fbx") == false)
+                {
+                    // Overwrite mesh asset (not FBX)
+                    EditorUtility.CopySerialized(newMesh, mesh);
+                    AssetDatabase.SaveAssets();
+                    Debug.Log($"[{go.name}] Overwrote source mesh asset: {assetPath}");
+                }
+                else
+                {
+                    Debug.LogWarning($"[{go.name}] Cannot overwrite mesh in FBX or non-asset mesh. Creating new asset instead.");
+                    string newAssetPath = $"{saveFolder}/{newMesh.name}.asset";
+                    AssetDatabase.CreateAsset(newMesh, newAssetPath);
+                    AssetDatabase.SaveAssets();
+                    Debug.Log($"[{go.name}] Stored smoothed normals in UV{uvChannel + 1} and saved as asset: {newAssetPath}");
+                }
+            }
+            else
+            {
+                string assetPath = $"{saveFolder}/{newMesh.name}.asset";
+                AssetDatabase.CreateAsset(newMesh, assetPath);
+                AssetDatabase.SaveAssets();
+                Debug.Log($"[{go.name}] Stored smoothed normals in UV{uvChannel + 1} and saved as asset: {assetPath}");
+            }
             mf.sharedMesh = newMesh;
-            Debug.Log($"[{go.name}] Stored smoothed normals in UV{uvChannel + 1}");
+        }
+    }
+
+    private void ExportSelectionAsFbx()
+    {
+        string saveFolder = "Assets/ProcessedMeshes";
+        if (!System.IO.Directory.Exists(saveFolder))
+            System.IO.Directory.CreateDirectory(saveFolder);
+        foreach (var go in Selection.gameObjects)
+        {
+            string fbxPath = $"{saveFolder}/{go.name}_Processed.fbx";
+            ModelExporter.ExportObject(fbxPath, go);
+            Debug.Log($"Exported {go.name} as FBX: {fbxPath}");
         }
     }
 
