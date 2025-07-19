@@ -30,3 +30,4 @@ Open **Tools > Smooth Normals to UV** to adjust settings:
 4. Click **Process Selected Meshes** to create and assign the new mesh.
 
 Each processed mesh gets a new asset name ending with `_SmoothNormals` and is automatically assigned back to the selected objects.
+
