@@ -20,6 +20,11 @@ public class SmoothNormalsToUV : EditorWindow
         GetWindow<SmoothNormalsToUV>(false, "Smooth Normals to UV", true);
     }
 
+    private void OnSelectionChange()
+    {
+        Repaint();
+    }
+
     private void OnGUI()
     {
         EditorGUILayout.LabelField("Store Smoothed Normals", EditorStyles.boldLabel);
