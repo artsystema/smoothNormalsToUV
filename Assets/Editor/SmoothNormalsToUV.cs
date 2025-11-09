@@ -5,11 +5,14 @@ using UnityEngine;
 
 public class SmoothNormalsToUV : EditorWindow
 {
-    private int uvChannel = 1; // Default UV2 (index 1)
+    private int normalChannel = 5; // Default to UV set 5 (index 4)
     private bool normalize = false;
     private bool useAngle = false;
     private float angleThreshold = 60f;
     private bool overwriteSource = false;
+    private GUIStyle indicatorStyle;
+
+    private static readonly List<Vector3> uvCheckList = new List<Vector3>();
 
     [MenuItem("Tools/Smooth Normals to UV")]
     public static void ShowWindow()
@@ -21,7 +24,8 @@ public class SmoothNormalsToUV : EditorWindow
     {
         EditorGUILayout.LabelField("Store Smoothed Normals", EditorStyles.boldLabel);
 
-        uvChannel = EditorGUILayout.IntField(new GUIContent("Target UV Channel"), uvChannel);
+        normalChannel = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent("Normal Channel"), normalChannel), 1, 8);
+        DrawChannelIndicator();
         normalize = EditorGUILayout.Toggle(new GUIContent("Normalize 0-1"), normalize);
         useAngle = EditorGUILayout.Toggle(new GUIContent("Use Angle Threshold"), useAngle);
         if (useAngle)
@@ -45,6 +49,9 @@ public class SmoothNormalsToUV : EditorWindow
         string saveFolder = "Assets/ProcessedMeshes";
         if (!System.IO.Directory.Exists(saveFolder))
             System.IO.Directory.CreateDirectory(saveFolder);
+        int channelIndex = Mathf.Clamp(normalChannel - 1, 0, 7);
+        int channelDisplay = channelIndex + 1;
+
         foreach (var go in Selection.gameObjects)
         {
             MeshFilter mf = go.GetComponent<MeshFilter>();
@@ -81,8 +88,8 @@ public class SmoothNormalsToUV : EditorWindow
                 else
                     uvData.Add(n);
             }
-            // Remove clamping, use entered value directly
-            newMesh.SetUVs(uvChannel, uvData);
+            // Store normals in the desired channel
+            newMesh.SetUVs(channelIndex, uvData);
 
             if (overwriteSource)
             {
@@ -100,7 +107,7 @@ public class SmoothNormalsToUV : EditorWindow
                     string newAssetPath = $"{saveFolder}/{newMesh.name}.asset";
                     AssetDatabase.CreateAsset(newMesh, newAssetPath);
                     AssetDatabase.SaveAssets();
-                    Debug.Log($"[{go.name}] Stored smoothed normals in UV{uvChannel + 1} and saved as asset: {newAssetPath}");
+                    Debug.Log($"[{go.name}] Stored smoothed normals in UV{channelDisplay} and saved as asset: {newAssetPath}");
                 }
             }
             else
@@ -108,7 +115,7 @@ public class SmoothNormalsToUV : EditorWindow
                 string assetPath = $"{saveFolder}/{newMesh.name}.asset";
                 AssetDatabase.CreateAsset(newMesh, assetPath);
                 AssetDatabase.SaveAssets();
-                Debug.Log($"[{go.name}] Stored smoothed normals in UV{uvChannel + 1} and saved as asset: {assetPath}");
+                Debug.Log($"[{go.name}] Stored smoothed normals in UV{channelDisplay} and saved as asset: {assetPath}");
             }
             mf.sharedMesh = newMesh;
         }
@@ -158,5 +165,51 @@ public class SmoothNormalsToUV : EditorWindow
         int z = Mathf.RoundToInt(v.z / precision);
         int hash = x * 73856093 ^ y * 19349663 ^ z * 83492791;
         return hash;
+    }
+
+    private void DrawChannelIndicator()
+    {
+        if (indicatorStyle == null)
+        {
+            indicatorStyle = new GUIStyle(EditorStyles.label)
+            {
+                richText = true
+            };
+        }
+
+        int channelIndex = Mathf.Clamp(normalChannel - 1, 0, 7);
+        bool hasChannel = true;
+        bool meshFound = false;
+
+        foreach (var go in Selection.gameObjects)
+        {
+            MeshFilter mf = go.GetComponent<MeshFilter>();
+            if (mf == null || mf.sharedMesh == null)
+                continue;
+
+            meshFound = true;
+
+            if (!MeshHasUVChannel(mf.sharedMesh, channelIndex))
+            {
+                hasChannel = false;
+                break;
+            }
+        }
+
+        if (!meshFound)
+            hasChannel = false;
+
+        string color = hasChannel ? "#00AA00" : "#AA0000";
+        string status = hasChannel ? "present" : "absent";
+        EditorGUILayout.LabelField($"<color={color}>●</color> Normal channel {status}", indicatorStyle);
+    }
+
+    private bool MeshHasUVChannel(Mesh mesh, int channelIndex)
+    {
+        if (channelIndex < 0 || channelIndex > 7)
+            return false;
+        uvCheckList.Clear();
+        mesh.GetUVs(channelIndex, uvCheckList);
+        return uvCheckList.Count > 0;
     }
 }
